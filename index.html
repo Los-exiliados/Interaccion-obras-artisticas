@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Multi-hand tracking</title>
+    <link rel="stylesheet" href="./estilo.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="app__header">
+        <div>
+          <p class="app__eyebrow">MediaPipe Hand Landmarker</p>
+          <h1 class="app__title">Up to 4 hands · 21 joints each</h1>
+          <p class="app__subtitle">
+            Every hand is tracked and read on its own: positions, per-joint velocity,
+            pinch, fingers and gesture state. The first two hands keep their identity when
+            more appear in frame.
+          </p>
+        </div>
+        <div class="app__controls">
+          <button id="start" class="button button--primary" type="button">Start camera</button>
+          <button id="stop" class="button" type="button" disabled>Stop</button>
+        </div>
+      </header>
+
+      <section class="stage">
+        <video id="camera" class="stage__video" autoplay muted playsinline></video>
+        <canvas id="overlay" class="stage__overlay"></canvas>
+        <p id="status" class="stage__status" role="status" aria-live="polite" hidden></p>
+      </section>
+
+      <section id="hands" class="hands is-empty" aria-label="Per-hand readings">
+        <p class="hands__empty">No hands detected. Raise one or more hands in front of the camera.</p>
+      </section>
+
+      <footer class="app__footer">
+        <p>
+          Serve this folder over <code>http://localhost</code> (for example
+          <code>python -m http.server 8080</code>). Camera access and ES modules do not
+          work from <code>file://</code>.
+        </p>
+        <p>
+          Read the live state from the console: <code>window.handTracking.hands</code> holds
+          one object per hand, each with its own <code>joints[]</code>,
+          <code>palm.velocity</code> and <code>events</code>.
+        </p>
+      </footer>
+    </main>
+
+    <script type="module">
+      import { createHandTracker } from "./js/handpose.js";
+      import { HandMotionEngine } from "./js/gamelogic.js";
+      import { HandOverlay, renderHandPanels } from "./js/ui.js";
+
+      const video = document.querySelector("#camera");
+      const canvas = document.querySelector("#overlay");
+      const statusBar = document.querySelector("#status");
+      const handsPanel = document.querySelector("#hands");
+      const startButton = document.querySelector("#start");
+      const stopButton = document.querySelector("#stop");
+
+      const mirrorPreview = true;
+      // Two people can share one camera; the two-hand path is unchanged below it.
+      const MAX_HANDS = 4;
+      const overlay = new HandOverlay({ canvas, video, mirror: mirrorPreview });
+      const engine = new HandMotionEngine({ mirror: mirrorPreview, smoothing: 0.55 });
+
+      let tracker = null;
+      let stream = null;
+      let active = false;
+
+      function setStatus(message, kind = "info") {
+        statusBar.textContent = message;
+        statusBar.dataset.kind = kind;
+        statusBar.hidden = message === "";
+      }
+
+      function syncControls() {
+        startButton.disabled = active;
+        stopButton.disabled = !active;
+        document.body.classList.toggle("is-running", active);
+      }
+
+      function onFrame({ hands, fps, timestamp }) {
+        const frame = engine.update(hands, timestamp);
+        overlay.draw(frame.hands, { fps });
+        renderHandPanels(handsPanel, frame.hands, frame.liveIds);
+
+        // Independent per-hand state, available to game logic and the console.
+        window.handTracking = {
+          engine,
+          hands: frame.hands,
+          byId: frame.byId,
+          events: frame.events,
+          fps,
+          timestamp,
+        };
+      }
+
+      function resize() {
+        overlay.resize();
+      }
+
+      async function start() {
+        if (active) return;
+        active = true;
+        syncControls();
+
+        try {
+          if (!window.isSecureContext) {
+            throw new Error("Camera requires a secure context. Open the page from http://localhost.");
+          }
+          if (!navigator.mediaDevices?.getUserMedia) {
+            throw new Error("This browser does not expose getUserMedia.");
+          }
+
+          setStatus("Requesting camera…");
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" },
+          });
+          video.srcObject = stream;
+          await video.play();
+          resize();
+
+          setStatus("Loading MediaPipe runtime…");
+          tracker = await createHandTracker({
+            video,
+            numHands: MAX_HANDS,
+            onStatus: ({ phase, delegate }) => {
+              setStatus(
+                phase === "model"
+                  ? `Loading hand model (${delegate})…`
+                  : "Loading MediaPipe runtime…",
+              );
+            },
+          });
+          tracker.start(onFrame);
+          setStatus("");
+        } catch (error) {
+          console.error("[hand tracking]", error);
+          const message = error?.message ?? String(error);
+          stop();
+          setStatus(message, "error");
+        }
+      }
+
+      function stop() {
+        tracker?.stop();
+        tracker?.close();
+        tracker = null;
+
+        for (const track of stream?.getTracks() ?? []) track.stop();
+        stream = null;
+        video.srcObject = null;
+
+        overlay.clear();
+        renderHandPanels(handsPanel, []);
+        window.handTracking = null;
+
+        active = false;
+        syncControls();
+      }
+
+      startButton.addEventListener("click", start);
+      stopButton.addEventListener("click", stop);
+      window.addEventListener("beforeunload", stop);
+
+      new ResizeObserver(resize).observe(canvas);
+      video.addEventListener("loadedmetadata", resize);
+      resize();
+      syncControls();
+    </script>
+  </body>
+</html>
