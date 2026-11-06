@@ -8,15 +8,17 @@
   </head>
   <body>
     <video id="camera" autoplay muted playsinline></video>
+    <div id="stage"></div>
     <canvas id="overlay"></canvas>
 
     <script type="module">
       import { createHandTracker } from "./js/handpose.js";
-      import { HandMotionEngine } from "./js/gamelogic.js";
+      import { GraphicsEngine, HandMotionEngine } from "./js/gamelogic.js";
       import { HandOverlay } from "./js/ui.js";
 
       const video = document.querySelector("#camera");
       const canvas = document.querySelector("#overlay");
+      const stage = document.querySelector("#stage");
 
       const mirrorPreview = true;
       const MAX_HANDS = 4;
@@ -25,10 +27,14 @@
 
       let tracker = null;
       let stream = null;
+      let graphics = null;
 
       function onFrame({ hands, fps, timestamp }) {
         const frame = engine.update(hands, timestamp);
         overlay.draw(frame.hands);
+
+        // Feeds the p5 graphics engine; phase 3 turns this into hand-driven effects.
+        graphics?.updateHands(frame);
 
         window.handTracking = {
           engine,
@@ -42,6 +48,16 @@
 
       function resize() {
         overlay.resize();
+      }
+
+      async function startGraphics() {
+        try {
+          // aspect: null -> the canvas fills the whole screen (16:9 was only a reference).
+          graphics = await GraphicsEngine.create(stage, { aspect: null });
+          window.graphics = graphics; // debug/phase-3 hook, mirrors window.handTracking
+        } catch (error) {
+          console.error("[graphics] failed to start the p5 engine", error);
+        }
       }
 
       async function start() {
@@ -64,6 +80,7 @@
       window.addEventListener("beforeunload", () => {
         tracker?.stop();
         tracker?.close();
+        graphics?.destroy();
         for (const track of stream?.getTracks() ?? []) track.stop();
       });
 
@@ -71,6 +88,7 @@
       window.addEventListener("resize", resize);
       video.addEventListener("loadedmetadata", resize);
       resize();
+      startGraphics();
       start();
     </script>
   </body>
