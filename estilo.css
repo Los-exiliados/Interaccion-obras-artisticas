@@ -6,19 +6,40 @@ body {
   background: #000;
 }
 
-video,
-canvas {
+/* Camera feed: fullscreen but invisible. It runs only as the hand-tracking
+   input. opacity: 0 keeps the video composited, so requestVideoFrameCallback
+   keeps firing for the detector (display: none would starve it). */
+video {
   position: fixed;
   inset: 0;
   width: 100%;
   height: 100%;
-}
-
-video {
   object-fit: cover;
   transform: scaleX(-1);
+  opacity: 0;
+  pointer-events: none;
 }
 
-canvas {
+/* Hand skeleton overlay, drawn on top of everything. */
+#overlay {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   pointer-events: none;
+}
+
+/* Fullscreen stage: the opaque p5 canvas covers the whole screen. */
+#stage {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+#stage canvas {
+  display: block;
+  pointer-events: auto;
 }
