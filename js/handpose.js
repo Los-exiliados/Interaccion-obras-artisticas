@@ -40,11 +40,26 @@ export const LANDMARK_NAMES = [
 
 /** Bones of the hand skeleton, as pairs of landmark indexes. */
 export const HAND_CONNECTIONS = [
-  [0, 1], [1, 2], [2, 3], [3, 4],
-  [0, 5], [5, 6], [6, 7], [7, 8],
-  [5, 9], [9, 10], [10, 11], [11, 12],
-  [9, 13], [13, 14], [14, 15], [15, 16],
-  [13, 17], [17, 18], [18, 19], [19, 20],
+  [0, 1],
+  [1, 2],
+  [2, 3],
+  [3, 4],
+  [0, 5],
+  [5, 6],
+  [6, 7],
+  [7, 8],
+  [5, 9],
+  [9, 10],
+  [10, 11],
+  [11, 12],
+  [9, 13],
+  [13, 14],
+  [14, 15],
+  [15, 16],
+  [13, 17],
+  [17, 18],
+  [18, 19],
+  [19, 20],
   [0, 17],
 ];
 
@@ -104,10 +119,16 @@ export async function createHandTracker(options = {}) {
   let landmarker;
   try {
     onStatus({ phase: "model", delegate: "GPU" });
-    landmarker = await vision.HandLandmarker.createFromOptions(wasmFileset, buildOptions("GPU"));
+    landmarker = await vision.HandLandmarker.createFromOptions(
+      wasmFileset,
+      buildOptions("GPU"),
+    );
   } catch (gpuError) {
     onStatus({ phase: "model", delegate: "CPU", reason: gpuError?.message });
-    landmarker = await vision.HandLandmarker.createFromOptions(wasmFileset, buildOptions("CPU"));
+    landmarker = await vision.HandLandmarker.createFromOptions(
+      wasmFileset,
+      buildOptions("CPU"),
+    );
   }
 
   return new HandTracker(video, landmarker, { numHands });
@@ -214,7 +235,12 @@ export class HandTracker {
 
   #tick() {
     const video = this.#video;
-    if (!video || video.readyState < 2 || video.currentTime === this.#lastVideoTime) return;
+    if (
+      !video ||
+      video.readyState < 2 ||
+      video.currentTime === this.#lastVideoTime
+    )
+      return;
     this.#lastVideoTime = video.currentTime;
 
     const timestamp = performance.now();
